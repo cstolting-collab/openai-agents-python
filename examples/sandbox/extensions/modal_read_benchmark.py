@@ -282,7 +282,9 @@ async def main() -> None:
     )
     _print_markdown(result)
     if args.json_out is not None:
-        args.json_out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        args.json_out.write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
 
 if __name__ == "__main__":
