@@ -772,6 +772,157 @@ async def test_modal_read_classifies_nonzero_cat_with_path_probe(
 
 
 @pytest.mark.asyncio
+async def test_modal_read_uses_native_filesystem_and_preserves_user_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    modal_module, _create_calls, _registry_tags = _load_modal_module(monkeypatch)
+    read_calls: list[str] = []
+    user_checks: list[tuple[Path, object]] = []
+
+    class _Filesystem:
+        def __init__(self) -> None:
+            self.read_bytes = _with_aio(self._read_bytes)
+
+        def _read_bytes(self, path: str) -> bytes:
+            read_calls.append(path)
+            return b"native-payload"
+
+    sandbox = types.SimpleNamespace(
+        object_id="sb-native-read",
+        filesystem=_Filesystem(),
+    )
+    state = modal_module.ModalSandboxSessionState(
+        manifest=Manifest(root="/workspace"),
+        snapshot=modal_module.resolve_snapshot(None, "snapshot"),
+        app_name="sandbox-tests",
+        sandbox_id=sandbox.object_id,
+    )
+    session = modal_module.ModalSandboxSession.from_state(state, sandbox=sandbox)
+
+    async def validate_path(path: Path, *, for_write: bool = False) -> Path:
+        _ = (path, for_write)
+        return Path("/workspace/target.bin")
+
+    async def check_user(path: Path, *, user: object | None = None) -> Path:
+        user_checks.append((path, user))
+        return Path("/workspace/target.bin")
+
+    async def fail_exec(*args: object, **kwargs: object) -> NoReturn:
+        pytest.fail(f"native read unexpectedly used shell exec: {args!r} {kwargs!r}")
+
+    monkeypatch.setattr(session, "_validate_path_access", validate_path)
+    monkeypatch.setattr(session, "_check_read_with_exec", check_user)
+    monkeypatch.setattr(session, "exec", fail_exec)
+
+    handle = await session.read(Path("target.bin"), user="reader")
+
+    assert handle.read() == b"native-payload"
+    assert read_calls == ["/workspace/target.bin"]
+    assert user_checks == [(Path("target.bin"), "reader")]
+
+
+@pytest.mark.asyncio
+async def test_modal_read_falls_back_to_shell_for_native_size_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    modal_module, _create_calls, _registry_tags = _load_modal_module(monkeypatch)
+
+    class _FileTooLargeError(Exception):
+        pass
+
+    modal_module.modal.exception.SandboxFilesystemFileTooLargeError = _FileTooLargeError
+    read_calls: list[str] = []
+
+    class _Filesystem:
+        def __init__(self) -> None:
+            self.read_bytes = _with_aio(self._read_bytes)
+
+        def _read_bytes(self, path: str) -> bytes:
+            read_calls.append(path)
+            raise _FileTooLargeError("native read limit")
+
+    sandbox = types.SimpleNamespace(
+        object_id="sb-large-read",
+        filesystem=_Filesystem(),
+    )
+    state = modal_module.ModalSandboxSessionState(
+        manifest=Manifest(root="/workspace"),
+        snapshot=modal_module.resolve_snapshot(None, "snapshot"),
+        app_name="sandbox-tests",
+        sandbox_id=sandbox.object_id,
+    )
+    session = modal_module.ModalSandboxSession.from_state(state, sandbox=sandbox)
+    commands: list[tuple[str, ...]] = []
+
+    async def validate_path(path: Path, *, for_write: bool = False) -> Path:
+        _ = (path, for_write)
+        return Path("/workspace/large.bin")
+
+    async def fake_exec(
+        *command: str | Path,
+        timeout: float | None = None,
+        shell: bool | list[str] = True,
+        user: object | None = None,
+    ) -> ExecResult:
+        _ = (timeout, shell, user)
+        commands.append(tuple(str(part) for part in command))
+        return ExecResult(stdout=b"shell-payload", stderr=b"", exit_code=0)
+
+    monkeypatch.setattr(session, "_validate_path_access", validate_path)
+    monkeypatch.setattr(session, "exec", fake_exec)
+
+    handle = await session.read(Path("large.bin"))
+
+    assert handle.read() == b"shell-payload"
+    assert read_calls == ["/workspace/large.bin"]
+    assert commands == [("sh", "-lc", "cat -- /workspace/large.bin")]
+
+
+@pytest.mark.asyncio
+async def test_modal_native_read_maps_not_found_without_shell_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    modal_module, _create_calls, _registry_tags = _load_modal_module(monkeypatch)
+
+    class _FilesystemNotFoundError(Exception):
+        pass
+
+    modal_module.modal.exception.SandboxFilesystemNotFoundError = _FilesystemNotFoundError
+
+    class _Filesystem:
+        def __init__(self) -> None:
+            self.read_bytes = _with_aio(self._read_bytes)
+
+        def _read_bytes(self, _path: str) -> bytes:
+            raise _FilesystemNotFoundError("missing")
+
+    sandbox = types.SimpleNamespace(
+        object_id="sb-missing-read",
+        filesystem=_Filesystem(),
+    )
+    state = modal_module.ModalSandboxSessionState(
+        manifest=Manifest(root="/workspace"),
+        snapshot=modal_module.resolve_snapshot(None, "snapshot"),
+        app_name="sandbox-tests",
+        sandbox_id=sandbox.object_id,
+    )
+    session = modal_module.ModalSandboxSession.from_state(state, sandbox=sandbox)
+
+    async def validate_path(path: Path, *, for_write: bool = False) -> Path:
+        _ = (path, for_write)
+        return Path("/workspace/missing.bin")
+
+    async def fail_exec(*args: object, **kwargs: object) -> NoReturn:
+        pytest.fail(f"missing native read unexpectedly used shell exec: {args!r} {kwargs!r}")
+
+    monkeypatch.setattr(session, "_validate_path_access", validate_path)
+    monkeypatch.setattr(session, "exec", fail_exec)
+
+    with pytest.raises(WorkspaceReadNotFoundError):
+        await session.read(Path("missing.bin"))
+
+
+@pytest.mark.asyncio
 async def test_modal_sandbox_create_passes_modal_cloud_bucket_mounts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
