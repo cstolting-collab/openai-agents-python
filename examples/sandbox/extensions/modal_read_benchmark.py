@@ -26,9 +26,10 @@ from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 
 from agents.extensions.sandbox import ModalSandboxClient, ModalSandboxClientOptions
+from agents.sandbox import Manifest
+from agents.sandbox.entries import File
 from agents.sandbox.session.base_sandbox_session import BaseSandboxSession
 from agents.sandbox.workspace_paths import sandbox_path_str
-from examples.sandbox.misc.example_support import text_manifest
 
 WORKLOAD_FILES: dict[str, str] = {
     "README.md": (
@@ -138,7 +139,12 @@ async def run_benchmark(
     cycles: int,
     warmup_cycles: int,
 ) -> dict[str, object]:
-    manifest = text_manifest(WORKLOAD_FILES)
+    manifest = Manifest(
+        entries={
+            path: File(content=contents.encode("utf-8"))
+            for path, contents in WORKLOAD_FILES.items()
+        }
+    )
     client = ModalSandboxClient()
     options = ModalSandboxClientOptions(app_name=app_name)
 

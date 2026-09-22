@@ -45,7 +45,14 @@ jobs:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         run: |
-          uv run python examples/sandbox/extensions/modal_read_benchmark.py             --observations 8             --cycles 10             --warmup-cycles 2             --json-out modal-read-benchmark.json             | tee modal-read-benchmark.md
+          set -o pipefail
+          uv run python examples/sandbox/extensions/modal_read_benchmark.py \
+            --observations 8 \
+            --cycles 10 \
+            --warmup-cycles 2 \
+            --json-out modal-read-benchmark.json \
+            | tee modal-read-benchmark.md
+          test -s modal-read-benchmark.json
 
       - name: Upload benchmark evidence
         if: steps.modal-auth.outputs.available == 'true'
@@ -55,6 +62,7 @@ jobs:
           path: |
             modal-read-benchmark.json
             modal-read-benchmark.md
+          if-no-files-found: error
 
       - name: Report missing live credentials
         if: steps.modal-auth.outputs.available != 'true'
