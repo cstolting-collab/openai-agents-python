@@ -50,6 +50,7 @@ from ....sandbox.errors import (
     SandboxError,
     WorkspaceArchiveReadError,
     WorkspaceArchiveWriteError,
+    WorkspaceReadNotFoundError,
     WorkspaceStartError,
     WorkspaceStopError,
     WorkspaceWriteTypeError,
