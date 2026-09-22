@@ -30,7 +30,6 @@ from agents.sandbox.session.base_sandbox_session import BaseSandboxSession
 from agents.sandbox.workspace_paths import sandbox_path_str
 from examples.sandbox.misc.example_support import text_manifest
 
-
 WORKLOAD_FILES: dict[str, str] = {
     "README.md": (
         "# Modal Demo Workspace\n\n"
