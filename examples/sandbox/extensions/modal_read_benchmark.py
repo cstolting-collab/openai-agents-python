@@ -25,11 +25,11 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 
+from examples.sandbox.misc.example_support import text_manifest
+
 from agents.extensions.sandbox import ModalSandboxClient, ModalSandboxClientOptions
 from agents.sandbox.session.base_sandbox_session import BaseSandboxSession
 from agents.sandbox.workspace_paths import sandbox_path_str
-
-from examples.sandbox.misc.example_support import text_manifest
 
 
 WORKLOAD_FILES: dict[str, str] = {
