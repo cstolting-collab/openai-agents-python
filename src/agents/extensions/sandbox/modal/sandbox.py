@@ -1252,8 +1252,33 @@ class ModalSandboxSession(BaseSandboxSession):
         if user is not None:
             await self._check_read_with_exec(path, user=user)
 
-        # Read by `cat` so the payload is returned as bytes.
         workspace_path = await self._validate_path_access(path)
+        await self._ensure_sandbox()
+        assert self._sandbox is not None
+
+        filesystem = getattr(self._sandbox, "filesystem", None)
+        read_bytes = getattr(filesystem, "read_bytes", None)
+        if callable(read_bytes):
+            try:
+                payload = await self._call_modal(
+                    read_bytes,
+                    sandbox_path_str(workspace_path),
+                    call_timeout=_DEFAULT_TIMEOUT_S,
+                )
+                return io.BytesIO(cast(bytes, payload))
+            except Exception as e:
+                if isinstance(
+                    e,
+                    _modal_exception_types("SandboxFilesystemFileTooLargeError"),
+                ):
+                    pass
+                elif isinstance(e, _modal_exception_types("SandboxFilesystemNotFoundError")):
+                    raise WorkspaceReadNotFoundError(path=workspace_path, cause=e) from e
+                else:
+                    raise WorkspaceArchiveReadError(path=workspace_path, cause=e) from e
+
+        # Modal's native filesystem read is capped at 5 GB. Preserve the existing
+        # shell transport as a compatibility fallback for larger files and older clients.
         cmd = ["sh", "-lc", f"cat -- {shlex.quote(sandbox_path_str(workspace_path))}"]
         try:
             out = await self.exec(*cmd, shell=False)
