@@ -22,8 +22,8 @@ import shlex
 import statistics
 import subprocess
 import time
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
-from typing import Awaitable, Callable, Sequence
 
 from agents.extensions.sandbox import ModalSandboxClient, ModalSandboxClientOptions
 from agents.sandbox.session.base_sandbox_session import BaseSandboxSession
