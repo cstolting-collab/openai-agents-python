@@ -18,8 +18,9 @@ jobs:
           version: "0.11.14"
           python-version: "3.14"
       - run: make sync
-      - name: Print exact formatter diff
+      - name: Print exact formatter and lint-fix diff
         run: |
           uv run ruff format examples/sandbox/extensions/modal_read_benchmark.py
+          uv run ruff check --fix examples/sandbox/extensions/modal_read_benchmark.py
           git diff -- examples/sandbox/extensions/modal_read_benchmark.py
           exit 1
