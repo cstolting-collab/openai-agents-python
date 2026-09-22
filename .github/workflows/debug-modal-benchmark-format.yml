@@ -1,0 +1,25 @@
+name: debug-modal-benchmark-format
+
+on:
+  push:
+    branches:
+      - debug/modal-benchmark-format
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.14"
+          python-version: "3.14"
+      - run: make sync
+      - name: Print exact formatter diff
+        run: |
+          uv run ruff format examples/sandbox/extensions/modal_read_benchmark.py
+          git diff -- examples/sandbox/extensions/modal_read_benchmark.py
+          exit 1
