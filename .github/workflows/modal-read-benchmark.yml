@@ -1,0 +1,63 @@
+name: Modal read workload benchmark
+
+on:
+  push:
+    branches:
+      - bench/modal-native-read-workload
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Detect Modal authentication
+        id: modal-auth
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          if [ -n "$MODAL_TOKEN_ID" ] && [ -n "$MODAL_TOKEN_SECRET" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup uv
+        if: steps.modal-auth.outputs.available == 'true'
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.14"
+          python-version: "3.14"
+
+      - name: Install dependencies
+        if: steps.modal-auth.outputs.available == 'true'
+        run: make sync
+
+      - name: Run live Modal workload benchmark
+        if: steps.modal-auth.outputs.available == 'true'
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          uv run python examples/sandbox/extensions/modal_read_benchmark.py             --observations 8             --cycles 10             --warmup-cycles 2             --json-out modal-read-benchmark.json             | tee modal-read-benchmark.md
+
+      - name: Upload benchmark evidence
+        if: steps.modal-auth.outputs.available == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: modal-read-benchmark-${{ github.sha }}
+          path: |
+            modal-read-benchmark.json
+            modal-read-benchmark.md
+
+      - name: Report missing live credentials
+        if: steps.modal-auth.outputs.available != 'true'
+        run: |
+          echo "BENCHMARK READY: MODAL_TOKEN_ID and MODAL_TOKEN_SECRET are not configured as repository secrets."
+          echo "No live Modal performance claim was made."
